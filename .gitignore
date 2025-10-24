@@ -1,1 +1,2 @@
 .vagrant
+playbooks/k8s-join-command.sh
