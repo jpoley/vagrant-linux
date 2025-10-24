@@ -72,7 +72,7 @@ vagrant up
 
 This will:
 1. Download the Ubuntu 24.04 Vagrant box (first time only)
-2. Create 3 VMs (k8s-control-plane, k8s-worker-1, k8s-worker-2)
+2. Create 3 VMs (k8s-cp, k8s-node-1, k8s-node-2)
 3. Run Ansible provisioning (all automated)
 
 **Expected time**: 15-20 minutes (depending on your internet speed and system)
@@ -86,8 +86,8 @@ This will:
 Or manually:
 
 ```bash
-vagrant ssh k8s-control-plane -c "kubectl get nodes -o wide"
-vagrant ssh k8s-control-plane -c "kubectl get pods -A"
+vagrant ssh k8s-cp -c "kubectl get nodes -o wide"
+vagrant ssh k8s-cp -c "kubectl get pods -A"
 ```
 
 ## Cluster Configuration
@@ -144,9 +144,9 @@ Use this when you need KVM for other applications.
 vagrant up
 
 # Start specific node
-vagrant up k8s-control-plane
-vagrant up k8s-worker-1
-vagrant up k8s-worker-2
+vagrant up k8s-cp
+vagrant up k8s-node-1
+vagrant up k8s-node-2
 
 # Stop the cluster
 vagrant halt
@@ -165,19 +165,19 @@ vagrant status
 
 ```bash
 # SSH into nodes
-vagrant ssh k8s-control-plane
-vagrant ssh k8s-worker-1
-vagrant ssh k8s-worker-2
+vagrant ssh k8s-cp
+vagrant ssh k8s-node-1
+vagrant ssh k8s-node-2
 
 # Run single command without interactive shell
-vagrant ssh k8s-control-plane -c "kubectl get nodes"
+vagrant ssh k8s-cp -c "kubectl get nodes"
 ```
 
 ### Kubernetes Operations
 
 ```bash
 # From control plane node
-vagrant ssh k8s-control-plane
+vagrant ssh k8s-cp
 
 # Inside control plane:
 kubectl get nodes
@@ -242,15 +242,15 @@ sudo usermod -aG vboxusers $USER
 **Solution**: Generate new token on control plane:
 
 ```bash
-vagrant ssh k8s-control-plane
+vagrant ssh k8s-cp
 kubeadm token create --print-join-command
 ```
 
 Copy the output to `playbooks/k8s-join-command.sh` and reprovision workers:
 
 ```bash
-vagrant provision k8s-worker-1 --provision-with worker
-vagrant provision k8s-worker-2 --provision-with worker
+vagrant provision k8s-node-1 --provision-with worker
+vagrant provision k8s-node-2 --provision-with worker
 ```
 
 ### Nodes Show "NotReady"
@@ -258,19 +258,19 @@ vagrant provision k8s-worker-2 --provision-with worker
 **Check 1**: Verify CNI is running:
 
 ```bash
-vagrant ssh k8s-control-plane -c "kubectl get pods -n kube-system -l k8s-app=calico-node"
+vagrant ssh k8s-cp -c "kubectl get pods -n kube-system -l k8s-app=calico-node"
 ```
 
 **Check 2**: Verify containerd is running:
 
 ```bash
-vagrant ssh k8s-worker-1 -c "systemctl status containerd"
+vagrant ssh k8s-node-1 -c "systemctl status containerd"
 ```
 
 **Check 3**: Check kubelet logs:
 
 ```bash
-vagrant ssh k8s-worker-1 -c "journalctl -u kubelet -f"
+vagrant ssh k8s-node-1 -c "journalctl -u kubelet -f"
 ```
 
 ### Pods Stuck in "Pending"
@@ -278,7 +278,7 @@ vagrant ssh k8s-worker-1 -c "journalctl -u kubelet -f"
 **Check**: Node resources:
 
 ```bash
-vagrant ssh k8s-control-plane -c "kubectl describe nodes"
+vagrant ssh k8s-cp -c "kubectl describe nodes"
 ```
 
 **Solution**: Increase node memory/CPU in Vagrantfile and reload:
@@ -339,7 +339,7 @@ To use `kubectl` from your host machine:
 
 ```bash
 # Copy kubeconfig from control plane
-vagrant ssh k8s-control-plane -c "cat ~/.kube/config" > ~/.kube/vagrant-k8s-config
+vagrant ssh k8s-cp -c "cat ~/.kube/config" > ~/.kube/vagrant-k8s-config
 
 # Use the config
 export KUBECONFIG=~/.kube/vagrant-k8s-config

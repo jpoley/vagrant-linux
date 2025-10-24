@@ -4,7 +4,7 @@
   become: true
   tasks:
     - name: Remove NoSchedule taint from control plane
-      command: kubectl taint nodes k8s-control-plane node-role.kubernetes.io/control-plane:NoSchedule-
+      command: kubectl taint nodes k8s-cp node-role.kubernetes.io/control-plane:NoSchedule-
       become_user: vagrant
       environment:
         KUBECONFIG: /home/vagrant/.kube/config
@@ -15,7 +15,7 @@
       changed_when: '"untainted" in untaint_result.stdout'
 
     - name: Verify control plane is schedulable
-      shell: kubectl describe node k8s-control-plane | grep -i taint || echo "No taints"
+      shell: kubectl describe node k8s-cp | grep -i taint || echo "No taints"
       become_user: vagrant
       environment:
         KUBECONFIG: /home/vagrant/.kube/config

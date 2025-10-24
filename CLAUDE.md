@@ -34,9 +34,9 @@ All configuration must be done manually per MANUAL_STEPS.md
 vagrant up
 
 # Start a specific node
-vagrant up k8s-control-plane
-vagrant up k8s-worker-1
-vagrant up k8s-worker-2
+vagrant up k8s-cp
+vagrant up k8s-node-1
+vagrant up k8s-node-2
 
 # Halt/stop the cluster
 vagrant halt
@@ -45,9 +45,9 @@ vagrant halt
 vagrant destroy -f
 
 # SSH into nodes
-vagrant ssh k8s-control-plane
-vagrant ssh k8s-worker-1
-vagrant ssh k8s-worker-2
+vagrant ssh k8s-cp
+vagrant ssh k8s-node-1
+vagrant ssh k8s-node-2
 
 # Reload with re-provisioning
 vagrant reload --provision
@@ -59,15 +59,15 @@ vagrant reload --provision
 ./verify-cluster.sh
 
 # Manual verification from control plane
-vagrant ssh k8s-control-plane -c "kubectl get nodes -o wide"
-vagrant ssh k8s-control-plane -c "kubectl get pods -A"
-vagrant ssh k8s-control-plane -c "cilium status"
+vagrant ssh k8s-cp -c "kubectl get nodes -o wide"
+vagrant ssh k8s-cp -c "kubectl get pods -A"
+vagrant ssh k8s-cp -c "cilium status"
 ```
 
 ### Re-provisioning
 ```bash
 # Re-run specific provisioning steps
-vagrant provision k8s-control-plane --provision-with ansible
+vagrant provision k8s-cp --provision-with ansible
 
 # Force re-provisioning of all nodes
 vagrant destroy -f && vagrant up
@@ -160,16 +160,16 @@ If workers fail to join:
 1. Check `playbooks/k8s-join-command.sh` exists and contains valid token
 2. Token expires after 24 hours - regenerate on control-plane:
    ```bash
-   vagrant ssh k8s-control-plane
+   vagrant ssh k8s-cp
    kubeadm token create --print-join-command
    ```
 3. Update `playbooks/k8s-join-command.sh` with new command
-4. Reprovision workers: `vagrant provision k8s-worker-1 --provision-with ansible`
+4. Reprovision workers: `vagrant provision k8s-node-1 --provision-with ansible`
 
 ### Cilium Not Ready
-1. Check Cilium pods: `vagrant ssh k8s-control-plane -c "kubectl get pods -n kube-system -l k8s-app=cilium"`
-2. Check Cilium status: `vagrant ssh k8s-control-plane -c "cilium status"`
-3. View logs: `vagrant ssh k8s-control-plane -c "kubectl logs -n kube-system -l k8s-app=cilium"`
+1. Check Cilium pods: `vagrant ssh k8s-cp -c "kubectl get pods -n kube-system -l k8s-app=cilium"`
+2. Check Cilium status: `vagrant ssh k8s-cp -c "cilium status"`
+3. View logs: `vagrant ssh k8s-cp -c "kubectl logs -n kube-system -l k8s-app=cilium"`
 
 ### Node NotReady
 1. Verify containerd is running: `vagrant ssh <node> -c "systemctl status containerd"`

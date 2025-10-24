@@ -44,7 +44,7 @@ lsmod | grep -E "(kvm|vbox)"
 
 **Test 2: Start Control Plane**
 ```bash
-vagrant up k8s-control-plane
+vagrant up k8s-cp
 ```
 
 **Watch for:**
@@ -63,8 +63,8 @@ vagrant up k8s-control-plane
 **Success Criteria:**
 - No errors in output
 - VM is running: `vagrant status` shows "running (virtualbox)"
-- Can SSH: `vagrant ssh k8s-control-plane`
-- Kubernetes API is up: `vagrant ssh k8s-control-plane -c "kubectl get nodes"`
+- Can SSH: `vagrant ssh k8s-cp`
+- Kubernetes API is up: `vagrant ssh k8s-cp -c "kubectl get nodes"`
 
 **If errors occur:**
 - Check error message carefully
@@ -76,7 +76,7 @@ vagrant up k8s-control-plane
 
 **Test 3: Start Worker Nodes**
 ```bash
-vagrant up k8s-worker-1 k8s-worker-2
+vagrant up k8s-node-1 k8s-node-2
 ```
 
 **Watch for:**
@@ -106,9 +106,9 @@ vagrant up k8s-worker-1 k8s-worker-2
 **Expected Output:**
 ```
 NAME                 STATUS   ROLES           AGE   VERSION
-k8s-control-plane    Ready    control-plane   Xm    v1.34.1
-k8s-worker-1         Ready    <none>          Xm    v1.34.1
-k8s-worker-2         Ready    <none>          Xm    v1.34.1
+k8s-cp    Ready    control-plane   Xm    v1.34.1
+k8s-node-1         Ready    <none>          Xm    v1.34.1
+k8s-node-2         Ready    <none>          Xm    v1.34.1
 
 All system pods running in kube-system namespace
 Calico pods running successfully
@@ -117,17 +117,17 @@ Calico pods running successfully
 **Manual Checks:**
 ```bash
 # Check nodes
-vagrant ssh k8s-control-plane -c "kubectl get nodes -o wide"
+vagrant ssh k8s-cp -c "kubectl get nodes -o wide"
 
 # Check all pods
-vagrant ssh k8s-control-plane -c "kubectl get pods -A"
+vagrant ssh k8s-cp -c "kubectl get pods -A"
 
 # Check Calico specifically
-vagrant ssh k8s-control-plane -c "kubectl get pods -n kube-system -l k8s-app=calico-node"
+vagrant ssh k8s-cp -c "kubectl get pods -n kube-system -l k8s-app=calico-node"
 
 # Deploy test workload
-vagrant ssh k8s-control-plane -c "kubectl create deployment nginx --image=nginx"
-vagrant ssh k8s-control-plane -c "kubectl get pods"
+vagrant ssh k8s-cp -c "kubectl create deployment nginx --image=nginx"
+vagrant ssh k8s-cp -c "kubectl get pods"
 ```
 
 **Success Criteria:**
@@ -175,7 +175,7 @@ vagrant status
 vagrant up
 
 # Quick check
-vagrant ssh k8s-control-plane -c "kubectl get nodes"
+vagrant ssh k8s-cp -c "kubectl get nodes"
 ```
 
 **Success Criteria:**

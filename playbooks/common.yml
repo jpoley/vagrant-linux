@@ -64,6 +64,6 @@
         line: "{{ item.ip }} {{ item.name }}"
         state: present
       loop:
-        - { ip: '192.168.57.10', name: 'k8s-control-plane' }
-        - { ip: '192.168.57.11', name: 'k8s-worker-1' }
-        - { ip: '192.168.57.12', name: 'k8s-worker-2' }
+        - { ip: '192.168.57.10', name: 'k8s-cp' }
+        - { ip: '192.168.57.11', name: 'k8s-node-1' }
+        - { ip: '192.168.57.12', name: 'k8s-node-2' }

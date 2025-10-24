@@ -39,7 +39,7 @@ Expected: All 3 nodes show "Ready" status
 │ STEP 4: Play with Kubernetes!                                    │
 └───────────────────────────────────────────────────────────────────┘
 
-    vagrant ssh k8s-control-plane
+    vagrant ssh k8s-cp
     kubectl get nodes
     kubectl create deployment nginx --image=nginx
     kubectl get pods
