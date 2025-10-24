@@ -1,0 +1,46 @@
+---
+- name: Install Cilium CNI
+  hosts: all
+  become: true
+  vars:
+    cilium_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+  tasks:
+    - name: Download Cilium CLI
+      get_url:
+        url: "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-{{ cilium_arch }}.tar.gz"
+        dest: "/tmp/cilium-linux-{{ cilium_arch }}.tar.gz"
+        mode: '0644'
+
+    - name: Extract Cilium CLI
+      unarchive:
+        src: "/tmp/cilium-linux-{{ cilium_arch }}.tar.gz"
+        dest: /usr/local/bin
+        remote_src: yes
+
+    - name: Check if Cilium is already installed
+      shell: kubectl get pods -n kube-system -l k8s-app=cilium --no-headers 2>/dev/null | wc -l
+      register: cilium_check
+      become_user: vagrant
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      ignore_errors: yes
+
+    - name: Install Cilium
+      shell: |
+        cilium install \
+          --version 1.18.0 \
+          --set kubeProxyReplacement=true
+      become_user: vagrant
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      when: cilium_check.stdout == "0"
+
+    - name: Wait for Cilium to be ready
+      shell: cilium status --wait --wait-duration=5m
+      become_user: vagrant
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      retries: 3
+      delay: 10
+      register: result
+      until: result.rc == 0

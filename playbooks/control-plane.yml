@@ -1,0 +1,68 @@
+---
+- name: Initialize Kubernetes control plane
+  hosts: all
+  become: true
+  vars:
+    k8s_version: "{{ kubernetes_version }}"
+  tasks:
+    - name: Check if Kubernetes is already initialized
+      stat:
+        path: /etc/kubernetes/admin.conf
+      register: k8s_init
+
+    - name: Initialize Kubernetes cluster
+      command: >
+        kubeadm init
+        --apiserver-advertise-address={{ control_plane_endpoint }}
+        --pod-network-cidr={{ pod_network_cidr }}
+        --kubernetes-version={{ k8s_version }}
+      when: not k8s_init.stat.exists
+      register: kubeadm_init
+
+    - name: Create .kube directory for vagrant user
+      file:
+        path: /home/vagrant/.kube
+        state: directory
+        owner: vagrant
+        group: vagrant
+        mode: '0755'
+
+    - name: Copy admin.conf to vagrant user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /home/vagrant/.kube/config
+        remote_src: yes
+        owner: vagrant
+        group: vagrant
+        mode: '0600'
+
+    - name: Create .kube directory for root user
+      file:
+        path: /root/.kube
+        state: directory
+        mode: '0755'
+
+    - name: Copy admin.conf to root user's kube config
+      copy:
+        src: /etc/kubernetes/admin.conf
+        dest: /root/.kube/config
+        remote_src: yes
+        mode: '0600'
+
+    - name: Generate join command
+      command: kubeadm token create --print-join-command
+      register: join_command
+
+    - name: Save join command to /tmp
+      copy:
+        content: |
+          #!/bin/bash
+          {{ join_command.stdout }}
+        dest: /tmp/k8s-join-command.sh
+        mode: '0755'
+
+    - name: Fetch join command to host
+      fetch:
+        src: /tmp/k8s-join-command.sh
+        dest: ./k8s-join-command.sh
+        flat: yes

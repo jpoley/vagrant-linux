@@ -1,0 +1,1 @@
+kubeadm join 192.168.57.10:6443 --token nip5i2.wpxl6znfwj5tbyt2 --discovery-token-ca-cert-hash sha256:abe57f2fc9874df21e94e32102db7d3e6068f51d88cc83ab7c3ec2cc592b30a4 

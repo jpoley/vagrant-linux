@@ -1,0 +1,36 @@
+---
+- name: Install Calico CNI
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if Calico is already installed
+      shell: kubectl get pods -n kube-system -l k8s-app=calico-node --no-headers 2>/dev/null | wc -l
+      register: calico_check
+      become_user: vagrant
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      ignore_errors: yes
+
+    - name: Download Calico manifest
+      get_url:
+        url: https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+        dest: /tmp/calico.yaml
+        mode: '0644'
+      when: calico_check.stdout == "0"
+
+    - name: Apply Calico manifest
+      shell: kubectl apply -f /tmp/calico.yaml
+      become_user: vagrant
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      when: calico_check.stdout == "0"
+
+    - name: Wait for Calico pods to be ready
+      shell: kubectl wait --for=condition=Ready pods -l k8s-app=calico-node -n kube-system --timeout=300s
+      become_user: vagrant
+      environment:
+        KUBECONFIG: /home/vagrant/.kube/config
+      retries: 3
+      delay: 10
+      register: result
+      until: result.rc == 0

@@ -1,0 +1,26 @@
+---
+- name: Join worker node to Kubernetes cluster
+  hosts: all
+  become: true
+  tasks:
+    - name: Check if node is already joined to cluster
+      stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Copy join command from host
+      copy:
+        src: ./k8s-join-command.sh
+        dest: /tmp/k8s-join-command.sh
+        mode: '0755'
+      when: not kubelet_conf.stat.exists
+
+    - name: Join worker node to cluster
+      command: /tmp/k8s-join-command.sh
+      when: not kubelet_conf.stat.exists
+
+    - name: Wait for kubelet to start
+      systemd:
+        name: kubelet
+        state: started
+      when: not kubelet_conf.stat.exists
