@@ -3,6 +3,7 @@
 
 # Kubernetes 1.34.1 cluster with containerd and Calico CNI
 # 1 control-plane node + 2 worker nodes
+# Using libvirt/KVM provider for Linux
 # Full automated provisioning enabled
 
 VAGRANTFILE_API_VERSION = "2"
@@ -36,13 +37,12 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       node_config.vm.hostname = node[:name]
       node_config.vm.network "private_network", ip: node[:ip]
 
-      # Provider configuration - VirtualBox for Linux
-      node_config.vm.provider "virtualbox" do |vb|
-        vb.name = node[:name]
-        vb.memory = node[:memory]
-        vb.cpus = node[:cpus]
-        vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
-        vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+      # Provider configuration - libvirt/KVM for Linux
+      node_config.vm.provider "libvirt" do |libvirt|
+        libvirt.cpus = node[:cpus]
+        libvirt.memory = node[:memory]
+        libvirt.cpu_mode = "host-passthrough"  # Expose all host CPU features for better performance
+        libvirt.default_prefix = "k8s_"        # VM name prefix
       end
 
       # Common setup for all nodes (swap, kernel modules, sysctl, /etc/hosts)
