@@ -8,9 +8,30 @@
         path: /etc/kubernetes/kubelet.conf
       register: kubelet_conf
 
+    - name: Wait for join command to be available from control plane
+      local_action:
+        module: wait_for
+        path: "{{ playbook_dir }}/k8s-join-command.sh"
+        timeout: 600
+      become: false
+      when: not kubelet_conf.stat.exists
+
+    - name: Verify join command exists on host
+      local_action:
+        module: stat
+        path: "{{ playbook_dir }}/k8s-join-command.sh"
+      become: false
+      register: join_cmd_file
+      when: not kubelet_conf.stat.exists
+
+    - name: Fail if join command not found
+      fail:
+        msg: "Join command file not found at {{ playbook_dir }}/k8s-join-command.sh. Control plane initialization failed or timed out."
+      when: not kubelet_conf.stat.exists and not join_cmd_file.stat.exists
+
     - name: Copy join command from host
       copy:
-        src: ./k8s-join-command.sh
+        src: "{{ playbook_dir }}/k8s-join-command.sh"
         dest: /tmp/k8s-join-command.sh
         mode: '0755'
       when: not kubelet_conf.stat.exists
@@ -18,6 +39,12 @@
     - name: Join worker node to cluster
       command: /tmp/k8s-join-command.sh
       when: not kubelet_conf.stat.exists
+      register: join_result
+
+    - name: Display join result
+      debug:
+        var: join_result.stdout_lines
+      when: not kubelet_conf.stat.exists and join_result is defined
 
     - name: Wait for kubelet to start
       systemd:
