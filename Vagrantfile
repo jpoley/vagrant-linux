@@ -37,6 +37,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
       node_config.vm.hostname = node[:name]
       node_config.vm.network "private_network", ip: node[:ip]
 
+      # Synced folders
+      node_config.vm.synced_folder "scripts", "/home/vagrant/scripts", create: true
+      node_config.vm.synced_folder "manifests", "/home/vagrant/manifests", create: true
+
       # Provider configuration - libvirt/KVM for Linux
       node_config.vm.provider "libvirt" do |libvirt|
         libvirt.cpus = node[:cpus]
