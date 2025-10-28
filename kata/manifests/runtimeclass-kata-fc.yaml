@@ -1,0 +1,19 @@
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: kata-fc
+  labels:
+    app.kubernetes.io/name: kata-containers
+    app.kubernetes.io/component: runtime
+    app.kubernetes.io/vmm: firecracker
+handler: kata-fc
+# Overhead for microVM - Kata adds ~130Mi memory and ~250m CPU for the VM itself
+overhead:
+  podFixed:
+    memory: "160Mi"
+    cpu: "250m"
+# Optional: Schedule only on nodes with Kata enabled
+# scheduling:
+#   nodeSelector:
+#     katacontainers.io/kata-runtime: "true"

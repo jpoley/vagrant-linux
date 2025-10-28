@@ -1,0 +1,12 @@
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: kata-qemu
+handler: kata-qemu
+overhead:
+  podFixed:
+    memory: "200Mi"  # QEMU overhead (slightly more than Firecracker)
+    cpu: "250m"
+scheduling:
+  nodeSelector:
+    kata-qemu: "enabled"

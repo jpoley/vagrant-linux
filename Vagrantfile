@@ -17,7 +17,7 @@ CONTROL_PLANE_IP = "192.168.57.10"
 NODES = [
   { name: "k8s-cp", ip: "192.168.57.10", cpus: 2, memory: 6144, role: "control-plane" },
   { name: "k8s-node-1", ip: "192.168.57.11", cpus: 2, memory: 2048, role: "worker" },
-  { name: "k8s-node-2", ip: "192.168.57.12", cpus: 2, memory: 2048, role: "worker" }
+  { name: "k8s-node-2", ip: "192.168.57.12", cpus: 2, memory: 4096, role: "worker" }
 ]
 
 Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|

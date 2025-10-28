@@ -1,0 +1,19 @@
+---
+apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: firecracker
+  labels:
+    app.kubernetes.io/name: firecracker
+    app.kubernetes.io/component: runtime
+handler: firecracker
+# Optional: Add overhead for microVM resources
+# This tells Kubernetes to reserve additional resources for the microVM itself
+overhead:
+  podFixed:
+    memory: "130Mi"
+    cpu: "250m"
+# Optional: Use node selector to ensure pods only schedule on nodes with Firecracker
+# scheduling:
+#   nodeSelector:
+#     firecracker.node.kubernetes.io/enabled: "true"

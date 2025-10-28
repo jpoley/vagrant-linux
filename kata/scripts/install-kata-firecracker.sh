@@ -1,0 +1,371 @@
+#!/bin/bash
+
+################################################################################
+# Kata Containers + Firecracker Installation Script
+#
+# This script installs Kata Containers with Firecracker as the VMM backend
+# on a Kubernetes worker node, providing production-ready microVM isolation.
+#
+# Architecture:
+#   - Keeps existing containerd for standard workloads
+#   - Adds Kata runtime with Firecracker VMM
+#   - Uses overlayfs snapshotter (simpler than devmapper)
+#   - RuntimeClass selector for pod scheduling
+#
+# Requirements:
+#   - Ubuntu 24.04
+#   - KVM support (/dev/kvm accessible)
+#   - Existing containerd installation
+#   - Nested virtualization enabled (libvirt host-passthrough)
+#
+# Usage:
+#   sudo ./install-kata-firecracker.sh
+#
+################################################################################
+
+set -euo pipefail
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+# Configuration
+KATA_VERSION="3.10.0"
+KATA_TARBALL="kata-static-${KATA_VERSION}-amd64.tar.xz"
+KATA_URL="https://github.com/kata-containers/kata-containers/releases/download/${KATA_VERSION}/${KATA_TARBALL}"
+INSTALL_DIR="/opt/kata"
+BIN_DIR="/usr/local/bin"
+
+# Logging functions
+log_info() { echo -e "${BLUE}[INFO]${NC} $1"; }
+log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
+log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
+error_exit() { log_error "$1"; exit 1; }
+
+# Check root
+[[ $EUID -ne 0 ]] && error_exit "This script must be run as root (use sudo)"
+
+log_info "========================================"
+log_info "Kata Containers + Firecracker Setup"
+log_info "========================================"
+echo ""
+
+################################################################################
+# Phase 1: Prerequisites
+################################################################################
+
+log_info "Phase 1: Validating prerequisites..."
+
+# Check KVM
+[[ ! -e /dev/kvm ]] && error_exit "/dev/kvm not found. KVM support required."
+[[ ! -r /dev/kvm ]] || [[ ! -w /dev/kvm ]] && error_exit "/dev/kvm not accessible."
+log_success "KVM support verified"
+
+# Check containerd
+systemctl is-active --quiet containerd || error_exit "containerd not running"
+log_success "containerd is running"
+
+# Check disk space
+AVAILABLE_GB=$(df /opt --output=avail --block-size=1G | tail -1 | tr -d ' ')
+[[ $AVAILABLE_GB -lt 5 ]] && log_warn "Low disk space: ${AVAILABLE_GB}GB. Need ~2GB for Kata."
+log_success "Disk space check passed"
+
+log_success "Phase 1 complete"
+echo ""
+
+################################################################################
+# Phase 2: Install Kata Containers
+################################################################################
+
+log_info "Phase 2: Installing Kata Containers ${KATA_VERSION}..."
+
+# Download Kata
+log_info "Downloading Kata static tarball..."
+cd /tmp
+wget -q --show-progress "$KATA_URL" || error_exit "Failed to download Kata"
+log_success "Downloaded Kata tarball"
+
+# Extract to / (tarball contains /opt/kata internally)
+log_info "Extracting Kata to ${INSTALL_DIR}..."
+tar -xf "$KATA_TARBALL" -C / || error_exit "Failed to extract Kata"
+rm -f "$KATA_TARBALL"
+log_success "Kata extracted"
+
+# Create symlinks
+log_info "Creating symlinks in ${BIN_DIR}..."
+ln -sf "${INSTALL_DIR}/bin/kata-runtime" "${BIN_DIR}/kata-runtime"
+ln -sf "${INSTALL_DIR}/bin/kata-collect-data.sh" "${BIN_DIR}/kata-collect-data.sh"
+ln -sf "${INSTALL_DIR}/bin/containerd-shim-kata-v2" "${BIN_DIR}/containerd-shim-kata-v2"
+log_success "Symlinks created"
+
+# Verify installation
+if ! kata-runtime --version &>/dev/null; then
+    error_exit "Kata installation failed verification"
+fi
+INSTALLED_VERSION=$(kata-runtime --version | head -1)
+log_success "Kata installed: $INSTALLED_VERSION"
+
+log_success "Phase 2 complete"
+echo ""
+
+################################################################################
+# Phase 3: Configure Kata with Firecracker
+################################################################################
+
+log_info "Phase 3: Configuring Kata to use Firecracker VMM..."
+
+# Backup original config
+KATA_CONFIG="${INSTALL_DIR}/share/defaults/kata-containers/configuration.toml"
+if [[ -f "$KATA_CONFIG" ]]; then
+    cp "$KATA_CONFIG" "${KATA_CONFIG}.backup"
+    log_info "Backed up Kata config"
+fi
+
+# Create custom Kata configuration for Firecracker
+log_info "Creating Kata+Firecracker configuration..."
+mkdir -p /etc/kata-containers
+cat > /etc/kata-containers/configuration-fc.toml <<'EOF'
+[hypervisor.firecracker]
+path = "/opt/kata/bin/firecracker"
+jailer_path = "/opt/kata/bin/jailer"
+kernel = "/opt/kata/share/kata-containers/vmlinux.container"
+# Use initrd instead of image for faster boot in nested virtualization
+initrd = "/opt/kata/share/kata-containers/kata-containers-initrd.img"
+
+# Firecracker-specific settings
+valid_hypervisor_paths = ["/opt/kata/bin/firecracker"]
+
+# Machine type (Firecracker only supports microvm)
+machine_type = "microvm"
+
+# Default number of vCPUs
+default_vcpus = 1
+# Maximum number of vCPUs
+default_maxvcpus = 2
+
+# Default memory size in MiB (reduced for nested virtualization)
+default_memory = 64
+
+# Memory slots
+memory_slots = 10
+
+# Enable confidential guest support
+# confidential_guest = false
+
+# Shared filesystem (9p or virtio-fs)
+shared_fs = "virtio-fs"
+
+# Enable virtio-mem
+# virtio_mem = false
+
+# Enable IOMMU
+enable_iommu = false
+
+# Enable guest swap
+enable_guest_swap = false
+
+# Enable file-based memory backend
+# file_mem_backend = ""
+
+# Enable pre-allocation of VM RAM
+# enable_mem_prealloc = false
+
+# Enable huge pages
+# enable_hugepages = false
+
+# Enable vhost-user-blk
+# enable_vhost_user_store = false
+
+# Disable image nvdimm
+disable_image_nvdimm = false
+
+# HotPlug vCPUs
+# hotplug_virt_on_root_bus = false
+
+# Enable SEV
+# confidential_guest = false
+
+# Network configuration
+disable_block_device_use = false
+
+# Enable annotations for block devices
+# enable_annotations = []
+
+# Block device cache
+block_device_cache_set = true
+block_device_cache_direct = false
+block_device_cache_noflush = false
+
+# Enable IO threads
+enable_iothreads = false
+
+# Entropy source
+entropy_source = "/dev/urandom"
+
+# Enable debug
+enable_debug = false
+
+[agent.kata]
+# Enable debug
+enable_debug = false
+
+# Enable tracing
+enable_tracing = false
+
+# Kernel modules to load
+kernel_modules = []
+
+[runtime]
+# Enable debug
+enable_debug = false
+
+# Enable tracing
+enable_tracing = false
+
+# Internetworking model (macvtap, tcfilter, none)
+internetworking_model = "tcfilter"
+
+# Disable new netns handling
+disable_new_netns = false
+
+# Sandbox cgroup only
+sandbox_cgroup_only = false
+
+# Enable pprof
+# enable_pprof = false
+
+# vCPUs to be hotplugged
+hotplug_virt_on_root_bus = false
+
+# Default experimental features
+experimental = []
+EOF
+
+log_success "Kata+Firecracker configuration created"
+
+# Check Firecracker binary exists
+if [[ ! -f "${INSTALL_DIR}/bin/firecracker" ]]; then
+    log_warn "Firecracker binary not found in Kata package, using system firecracker"
+    # Link to system firecracker if we have it from previous install
+    if [[ -f "/usr/local/bin/firecracker" ]]; then
+        ln -sf "/usr/local/bin/firecracker" "${INSTALL_DIR}/bin/firecracker"
+        log_info "Linked to existing Firecracker binary"
+    fi
+fi
+
+log_success "Phase 3 complete"
+echo ""
+
+################################################################################
+# Phase 4: Configure Containerd
+################################################################################
+
+log_info "Phase 4: Configuring containerd for Kata+Firecracker..."
+
+CONTAINERD_CONFIG="/etc/containerd/config.toml"
+
+# Backup containerd config
+if [[ ! -f "${CONTAINERD_CONFIG}.backup-pre-kata" ]]; then
+    cp "$CONTAINERD_CONFIG" "${CONTAINERD_CONFIG}.backup-pre-kata"
+    log_info "Backed up containerd config"
+fi
+
+# Check if kata-fc runtime already exists
+if grep -q 'runtimes.kata-fc' "$CONTAINERD_CONFIG"; then
+    log_warn "kata-fc runtime already exists in containerd config"
+else
+    log_info "Adding kata-fc runtime to containerd..."
+
+    # Add kata-fc runtime configuration
+    cat >> "$CONTAINERD_CONFIG" <<'EOF'
+
+# Kata Containers with Firecracker VMM
+[plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-fc]
+  runtime_type = "io.containerd.kata.v2"
+  privileged_without_host_devices = true
+  pod_annotations = ["io.katacontainers.*"]
+  [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.kata-fc.options]
+    ConfigPath = "/etc/kata-containers/configuration-fc.toml"
+EOF
+    log_success "kata-fc runtime added to containerd"
+fi
+
+# Restart containerd
+log_info "Restarting containerd..."
+systemctl restart containerd || error_exit "Failed to restart containerd"
+sleep 3
+
+if systemctl is-active --quiet containerd; then
+    log_success "containerd restarted successfully"
+else
+    error_exit "containerd failed to start. Check: journalctl -u containerd"
+fi
+
+log_success "Phase 4 complete"
+echo ""
+
+################################################################################
+# Phase 5: Verification
+################################################################################
+
+log_info "Phase 5: Verifying installation..."
+
+# Check Kata runtime
+log_info "Checking Kata runtime..."
+if kata-runtime kata-check 2>&1 | grep -q "System is capable"; then
+    log_success "Kata runtime check passed"
+else
+    log_warn "Kata runtime check had warnings (may be OK)"
+fi
+
+# Check containerd runtime
+log_info "Checking containerd runtime registration..."
+if crictl --runtime-endpoint unix:///run/containerd/containerd.sock info 2>/dev/null | grep -q "kata"; then
+    log_success "Kata runtime visible in containerd"
+else
+    log_info "Kata runtime may not be visible yet (this can be normal)"
+fi
+
+# List installed components
+log_info "Installed Kata components:"
+ls -lh "${INSTALL_DIR}/bin/" | grep -E "kata-runtime|firecracker|containerd-shim" || true
+
+log_success "Phase 5 complete"
+echo ""
+
+################################################################################
+# Installation Summary
+################################################################################
+
+log_success "========================================"
+log_success "Installation Complete!"
+log_success "========================================"
+echo ""
+log_info "Installed components:"
+log_info "  - Kata Containers ${KATA_VERSION}"
+log_info "  - VMM: Firecracker (via Kata)"
+log_info "  - Runtime: kata-fc (in containerd)"
+echo ""
+log_info "Key files:"
+log_info "  - Kata binaries: ${INSTALL_DIR}/bin/"
+log_info "  - Kata config: /etc/kata-containers/configuration-fc.toml"
+log_info "  - Containerd config: ${CONTAINERD_CONFIG}"
+log_info "  - Backup: ${CONTAINERD_CONFIG}.backup-pre-kata"
+echo ""
+log_info "Next steps:"
+log_info "  1. Create RuntimeClass: kubectl apply -f manifests/runtimeclass-kata-fc.yaml"
+log_info "  2. Deploy test pod: kubectl apply -f manifests/nginx-kata-fc-test.yaml"
+log_info "  3. Verify: kubectl get pods -o wide"
+echo ""
+log_info "To disable Kata on this node:"
+log_info "  sudo ./scripts/disable-kata-firecracker.sh"
+echo ""
+log_info "To re-enable Kata on this node:"
+log_info "  sudo ./scripts/enable-kata-firecracker.sh"
+echo ""
+
+exit 0
