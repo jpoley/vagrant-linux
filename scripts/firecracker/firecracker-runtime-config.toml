@@ -1,0 +1,10 @@
+
+        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.firecracker]
+          runtime_type = "io.containerd.runc.v2"
+          pod_annotations = []
+          container_annotations = []
+          privileged_without_host_devices = false
+          snapshotter = "overlayfs"
+
+          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.firecracker.options]
+            BinaryName = "/usr/local/bin/containerd-shim-aws-firecracker"
